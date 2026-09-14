@@ -1,9 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserRepository } from '../domain/user.repository';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as argon2 from 'argon2';
 import { toSafeUser, toSafeUsers } from '../domain/user.entity';
 import { NotificationPort } from 'src/contexts/tasks/todo/domain/notification.port';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -47,5 +52,40 @@ export class UserService {
     });
 
     return toSafeUser(user);
+  }
+
+  async getOne(id: string) {
+    const user = await this.userRepository.findById(id);
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    return toSafeUser(user);
+  }
+
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    currentUser: { id: string; role: string },
+  ) {
+    const existing = await this.userRepository.findById(id);
+    if (!existing) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    if (currentUser.id !== id && currentUser.role !== 'ADMIN') {
+      throw new ForbiddenException('You can only update your own user');
+    }
+    const updated = await this.userRepository.update(id, dto);
+    return toSafeUser(updated!);
+  }
+
+  async deleteItem(id: string, currentUser: { role: string }) {
+    if (currentUser.role !== 'ADMIN') {
+      throw new ForbiddenException('Only admins can delete users');
+    }
+    const existing = await this.userRepository.findById(id);
+    if (!existing) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    return this.userRepository.deleteItem(id);
   }
 }
